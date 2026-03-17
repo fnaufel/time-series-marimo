@@ -9,4 +9,8 @@ dependencies = [
     "marimo>=0.20.4",
     "polars>=1.39.0",
     "pyzmq>=27.1.0",
+    "statsmodels>=0.14.6",
 ]
+
+[tool.marimo.display]
+theme = "system"
