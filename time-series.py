@@ -22,13 +22,11 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md("""
-    <div style="text-align: right;">
-    <em>It is difficult to make predictions, especially about the future.</em>
-    <br />
-    NIELS BOHR, Danish physicist
-    </div>
-    """)
+    mo.md(
+        '*It is difficult to make predictions, especially about the future.*  '
+        '\n'
+        'NIELS BOHR, Danish physicist'
+    ).right()
     return
 
 
@@ -53,8 +51,10 @@ def _():
     import marimo as mo
     import polars as pl
     import altair as alt
+    alt.data_transformers.enable('marimo_csv')
+    from statsmodels.tsa.stattools import adfuller
     mo.show_code()
-    return alt, mo, pl
+    return adfuller, alt, mo, pl
 
 
 @app.cell
@@ -87,14 +87,14 @@ def _(mo):
 
 @app.cell
 def _(df, january_labeled_monthly_line_chart, mo):
-    chart = january_labeled_monthly_line_chart(
+    chart_original = january_labeled_monthly_line_chart(
         df,
         y="#Passengers",
         title="Passengers by Month",
     )
 
-    mo.show_code(chart)
-    return
+    mo.show_code(chart_original)
+    return (chart_original,)
 
 
 @app.cell
@@ -102,6 +102,162 @@ def _(mo):
     mo.md(r"""
     ## Stationarity
     """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    A time series is **stationary** if the mean and the standard deviation are constant through time.
+
+    In our example, we can verify that the time series is **not** stationary. As the years go by, the mean goes up and the values are more spread out (the standard deviation goes up).
+
+    In the chart below, select a time interval by using the mouse and check the statistics for the selected points:
+    """)
+    return
+
+
+@app.cell
+def _(chart_original, mo):
+    chart_select = mo.ui.altair_chart(
+        chart_original
+    )
+
+    chart_select
+    return (chart_select,)
+
+
+@app.cell
+def _(chart_select, df, mo, selection_summary_md):
+    _df_selected = chart_select.apply_selection(df)
+
+    mo.md(
+        selection_summary_md(
+            _df_selected,
+            value_column="#Passengers",
+            value_label="passengers",
+        )
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ### ADF test for stationarity
+
+    The Augmented Dickey-Fuller (ADF) test is a statistical hypothesis test where **the null hypothesis** is that the series is **non-stationary**.
+
+    For our example:
+    """)
+    return
+
+
+@app.cell
+def _(adf_md, df, mo):
+    mo.md(adf_md(df['#Passengers']))
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ### How to make the series stationary
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    #### Differencing for the mean
+
+    Let's write $y(t)$ for the number of passengers at time $t$.
+
+    Instead of working with the values
+    $$
+    y(t)
+    $$
+    we work with the **discrete differences**
+    $$
+    y(t) - y(t-k)
+    $$
+    for some natural $k > 0$.
+
+    The value of $k$ is the **order** of the differencing.
+
+    Usually, $k = 1$ is enough to make the mean constant through time.
+
+    The `diff()` method (in Pandas or in Polars) computes the discrete difference of a series (which is also a series).
+
+    Choose the value of $k$ in the slider below to see how the graph below changes.
+
+    Select a time range in the graph to see the statistics for it.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    diff_order = mo.ui.slider(
+        start=0,
+        stop=5,
+        step=1,
+        value=1,
+        show_value=True,
+        label="Differencing order (k)",
+    )
+
+    diff_order
+    return (diff_order,)
+
+
+@app.cell
+def _(df, diff_order, january_labeled_monthly_line_chart, pl):
+    _diff_expr = pl.col("#Passengers").cast(pl.Float64)
+    for _ in range(diff_order.value):
+        _diff_expr = _diff_expr.diff()
+
+    df_diff = (
+        df.with_columns(_diff_expr.alias("#Passengers_diff"))
+        .drop_nulls("#Passengers_diff")
+    )
+
+    chart_diff = january_labeled_monthly_line_chart(
+        df_diff,
+        y="#Passengers_diff",
+        title=f"Passengers by Month after differencing of order {diff_order.value}",
+    )
+
+
+    return chart_diff, df_diff
+
+
+@app.cell
+def _(adf_md, df_diff, mo):
+    mo.md(adf_md(df_diff['#Passengers_diff']))
+    return
+
+
+@app.cell
+def _(chart_diff, mo):
+    chart_diff_select = mo.ui.altair_chart(chart_diff)
+
+    chart_diff_select
+    return (chart_diff_select,)
+
+
+@app.cell
+def _(chart_diff_select, df_diff, mo, selection_summary_md):
+    _df_diff_selected = chart_diff_select.apply_selection(df_diff)
+
+    mo.md(
+        selection_summary_md(
+            _df_diff_selected,
+            value_column="#Passengers_diff",
+            value_label="differenced passengers",
+        )
+    )
     return
 
 
@@ -161,16 +317,8 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    **Switch to editor mode** to see the code below.
-    """)
-    return
-
-
 @app.cell
-def _(alt, pl):
+def _(alt, mo, pl):
     def january_labeled_monthly_line_chart(
         df: pl.DataFrame,
         x: str = "Month",
@@ -237,7 +385,54 @@ def _(alt, pl):
 
         return chart
 
+    mo.show_code()
     return (january_labeled_monthly_line_chart,)
+
+
+@app.cell
+def _(mo, pl):
+    def selection_summary_md(
+        df: pl.DataFrame,
+        *,
+        value_column: str,
+        value_label: str,
+    ) -> str:
+        _summary = df.select(
+            pl.col("Month").min().alias("month_min"),
+            pl.col("Month").max().alias("month_max"),
+            pl.len().alias("n_selected_points"),
+            pl.col(value_column).mean().alias("mean_value"),
+            pl.col(value_column).std().alias("std_value"),
+        ).row(0, named=True)
+
+        _month_min = _summary["month_min"]
+        _month_max = _summary["month_max"]
+        _n_selected_points = _summary["n_selected_points"]
+        _mean_value = _summary["mean_value"]
+        _std_value = _summary["std_value"]
+
+        _mean_display = "N/A" if _mean_value is None else f"{_mean_value:.2f}"
+        _std_display = "N/A" if _std_value is None else f"{_std_value:.2f}"
+
+        return f"""
+        - Minimum month: `{_month_min}`
+        - Maximum month: `{_month_max}`
+        - Selected points: `{_n_selected_points}`
+        - Mean {value_label}: `{_mean_display}`
+        - Std. dev. {value_label}: `{_std_display}`
+        """
+
+    mo.show_code()
+    return (selection_summary_md,)
+
+
+@app.cell
+def _(adfuller):
+    def adf_md(series):
+        _p_value = adfuller(series)[1]
+        return f'ADF test p-value: {_p_value:.5f}'
+
+    return (adf_md,)
 
 
 if __name__ == "__main__":
