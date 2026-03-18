@@ -30,18 +30,10 @@ def _(mo):
     return
 
 
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ### Example: airline passenger data
-    """)
-    return
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Imports:
+    ### Imports
     """)
     return
 
@@ -49,13 +41,35 @@ def _(mo):
 @app.cell
 def _():
     import marimo as mo
+    import numpy as np
     import polars as pl
     import altair as alt
     alt.data_transformers.enable('marimo_csv')
     from scipy.stats import boxcox
-    import numpy as np
+    from scipy.special import inv_boxcox
+    from statsmodels.tsa.seasonal import seasonal_decompose
+    from statsmodels.tsa.arima.model import ARIMA
+    from statsmodels.graphics.tsaplots import plot_acf
     mo.show_code()
-    return alt, mo, np, pl
+    return (
+        ARIMA,
+        alt,
+        boxcox,
+        inv_boxcox,
+        mo,
+        np,
+        pl,
+        plot_acf,
+        seasonal_decompose,
+    )
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ### Example: airline passenger data
+    """)
+    return
 
 
 @app.cell
@@ -153,23 +167,30 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md(r"""
-    #### Differencing for the mean
+    #### Differencing to make the mean constant
 
-    Let's write $y(t)$ for the number of passengers at time $t$. Instead of working with the values
+    Let's write $y_t$ for the number of passengers at time $t$. Instead of working with the values
     $$
-    y(t)
+    y_t
     $$
-    we work with the **discrete differences**
+    we work with the **discrete differences** $y'$
     $$
-    y(t) - y(t-k)
+    y'_t = y_t - y_{t-1}
     $$
-    for some natural $k > 0$. The value of $k$ is the **order** of the differencing.
 
-    Usually, $k = 1$ is enough to make the mean constant through time.
+    We may difference the resulting series again, obtaining a second-order differenced series $y^*$:
+    $$
+    \begin{aligned}
+    y_{t}^{*}
+    &=y_{t}'-y_{t-1}'\\
+    &=(y_{t}-y_{t-1})-(y_{t-1}-y_{t-2})\\
+    &=y_{t}-2y_{t-1}+y_{t-2}
+    \end{aligned}
+    $$
 
     The `diff()` method (in Pandas or in Polars) computes the discrete difference of a series (which is also a series).
 
-    Choose the value of $k$ in the slider below to see how the graph below changes, then select a time range in the graph to see the statistics for it.
+    Choose the value of the differencing order $k$ in the slider below to see how the graph changes, then select a time range in the graph to see the statistics for it.
     """)
     return
 
@@ -233,7 +254,7 @@ def _(chart_diff_select, df_diff, mo, selection_summary_md):
 @app.cell
 def _(mo):
     mo.md(r"""
-    #### Log transforming for the standard deviation
+    #### Log transforming to make the standard deviation constant
 
     The plot shows the standard deviation is still not constant through time. We can correct that by transforming the values using a log function.
 
@@ -297,7 +318,22 @@ def _(mo):
 
     The transformation depends on the value of a parameter $\lambda$. The scipy function that computes the Box-Cox transform finds the value of $\lambda$ that maximizes the log-likelihood function and returns it as the second output argument. [See how to use it in the documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.boxcox.html). If a simple log transform does not make the series stationary, try running this function.
 
-    For our example, the log transform was enough.
+    For our example, the log transform was enough. If we run the `boxcox` function, we find it picks a value of $\lambda$ that is close to zero:
+    """)
+    return
+
+
+@app.cell
+def _(boxcox, df, mo):
+    _, lbd = boxcox(df['Passengers'])
+    mo.show_code()
+    return (lbd,)
+
+
+@app.cell
+def _(lbd, mo):
+    mo.md(fr"""
+    Value of $\lambda$ chosen by `boxcox` function: {lbd:.2f}
     """)
     return
 
@@ -309,12 +345,307 @@ def _(mo):
 
     We can try to decompose a time series into 3 components:
 
-    - Trend,
-    - Seasonality,
-    - Residuals.
+    - A **trend** component $T$,
+    - A **seasonality** component $S$,
+    - A **residual** component $R$.
 
-    Going back to the original time series (with no transformations), we get the following components:
+    We can choose to combine these in an **additive model**
+    $$
+    y_t = T_t + S_t + R_t
+    $$
+    or in a **multiplicative model**
+    $$
+    y_t = T_t \cdot S_t \cdot R_t
+    $$
+
+    The choice of model depends on the characteristics of the realization of the time series we have. In our example, the fact that the standard deviation grows with time suggests the multiplicative model might be adequate:
     """)
+    return
+
+
+@app.cell
+def _(df, mo, seasonal_decompose):
+    decomposition_mult = seasonal_decompose(
+        df['Passengers'], 
+        model='multiplicative',
+        period = 12
+    )
+    mo.show_code(decomposition_mult.plot())
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Equivalently, we could have applied a log (or Box-Cox) transform to the `Passengers` column and then used an additive model. This is left as an exercise.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Autocorrelation
+
+    The **correlation** between two vectors $X$ and $Y$ is a measure of how the values of $X$ change as the values of $Y$ change, as we traverse $X$ and $Y$ in order.
+
+    If the values of $Y$ are approximately proportional to the values of $X$, then the correlation is close to $1$.
+
+    If the values of $Y$ are approximately inversely proportional to the values of $X$, then the correlation is close to $-1$.
+
+    Intermediate situations produce values between $-1$ and $1$ for the correlation. A value of zero means there is no **linear** correlation between $X$ and $Y$.
+
+    In the analysis of time series, it is useful to measure the **autocorrelation** between the series and **lagged versions** of the series. The result for our example can be visualized as the plot below. The dot corresponding to position $k$ in the $x$ axis is the value of the correlation between the series $Y_t$ and the lagged series $Y_{t - k}$.
+
+    The blue region indicates a $95\%$ confidence interval for the null correlation; i.e., only dots outside it represent significant correlations.
+    """)
+    return
+
+
+@app.cell
+def _(df, mo, plot_acf):
+    mo.show_code(plot_acf(df['Passengers'], lags=48))
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    As expected, a cycle of length $12$ can be observed, corresponding to yearly patterns.
+
+    We can also see that lags up to $k = 14$ are significantly correlated to the series. This means that, in an autoregressive model (to be discussed below), we should use an equation of the form
+    $$
+    y_t = \varphi_1 y_{t-1} + \varphi_2 y_{t-2} + \cdots + \varphi_{14} y_{t-14} + \varepsilon_t
+    $$
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Modeling and Forecasting
+
+    All we have so far are the **data** for the numbers of passengers. These data can be considered to be a **realization** of a time series. Using this terminology, the time series itself is the **process** that produces the numbers as time goes by, according to certain rules that we do not know but that **we want to model**.
+
+    In other words, we want to find a **model for the time series**: a mathematical expression (i.e. an equation of the form $y_t = \cdots$) that captures the effects of the phenomena that produce these numbers.
+
+    These models can be of different forms.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Autoregressive models
+
+    This kind of model tries to see the current value $y_t$ as a function of the previous values $y_{t-1}, y_{t-2}, \ldots, y_{t-p}$. The number $p$ of previous values is the **order** of the autoregression.
+
+    The equation is
+    $$
+    y_t = \varphi_1y_{t-1} + \varphi_2y_{t-2} + \cdots + \varphi_py_{t-p} + \varepsilon_t
+    $$
+
+    Note that
+
+    - If all coefficients are zero, this is **white noise**.
+    - If $p = 1$ and $\varphi_1 = 1$, this is a **random walk**.
+
+    As with any statistical model, the coefficients $\varphi_i$ must be **estimated** from the **training data** we have. Once we have values for the coefficients, we **validate** the model against the **test data** we set aside for that purpose.
+
+    In order to build an autoregressive model, the data we have must be **stationary**. If necessary, we can apply the transformations presented at the beginning of this document.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Moving-average models
+
+    This kind of model tries to express $y_t$ as a function of previous **errors** (instead of previous **values**). More precisely, the equation is
+    $$
+    y_{t} = \mu +\varepsilon_{t} + \theta_{1}\varepsilon_{t-1} + \cdots + \theta_{q}\varepsilon _{t-q}
+    $$
+    where $\mu$ is the mean of the series.
+
+    The number $q$ of lagged errors used is called the **order** of the model.
+
+    This model is more complicated to build, because the lagged error terms are not observable and must be estimated too, along with the coefficients $\theta_i$.
+
+    Again, the data must be stationary for this model to be used.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### ARIMA models
+
+    ARIMA stands for **autoregressive integrated moving average**. This kind of model uses a combination of three of the techniques we have already covered here:
+
+    1. Auto regression (AR),
+    2. Differencing, also called integration (I),
+    3. Moving average (MA).
+
+    In order to build an ARIMA model, we must choose the orders for the three methods:
+
+    - $p$: the order for the autoregressive model,
+    - $d$: the order for the differencing,
+    - $q$: the order for the moving-average model.
+
+    After these choices are made, the model is referred to as ARIMA($p$, $d$, $q$).
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Fitting a model to the passenger data
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Make the standard deviation constant
+
+    ARIMA takes care of the differencing, but we must apply a transformation to make the standard deviation constant. Let's use the Box-Cox transform:
+    """)
+    return
+
+
+@app.cell
+def _(boxcox, df, mo):
+    passengers, lamb = boxcox(df['Passengers'])
+    mo.show_code()
+    return lamb, passengers
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Split the data
+
+    Let's train the model on the first 80% of the data and test it on the remaining 20%:
+    """)
+    return
+
+
+@app.cell
+def _(mo, passengers):
+    npoints = len(passengers)
+    train = passengers[:int(.8 * npoints)]
+    test = passengers[int(.8 * npoints):]
+    mo.show_code()
+    return test, train
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Choose the orders
+
+    Based on the autocorrelation of the data, $p = 15$ is a good choice for the order of the autoregression.
+
+    We will choose $d = 1$ for the differencing.
+
+    We will choose $q = 15$ for the moving-average model.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    p = 15
+    d = 1
+    q = 15
+    mo.show_code()
+    return d, p, q
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Fit the model on the training data
+    """)
+    return
+
+
+@app.cell
+def _(ARIMA, d, p, q, train):
+    model = ARIMA(train, order=(p, d, q)).fit()
+    return (model,)
+
+
+@app.cell
+def _(model):
+    model.summary()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Test the model on the test data
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    We ask the model to predict the next `len(test)` values of the series. The returned values are based on the Box-Cox-transformed data, so we must undo the transform.
+    """)
+    return
+
+
+@app.cell
+def _(inv_boxcox, lamb, mo, model, pl, test):
+    boxcox_forecasts = model.forecast(len(test))
+    forecasts = pl.Series(inv_boxcox(boxcox_forecasts, lamb))
+    mo.show_code()
+    return (forecasts,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    We now build a plot to compare the forecasts to the real values in the test data. We show the known values in blue (starting a year before the beginning of the test data) and the predicted values for the test data (in red):
+    """)
+    return
+
+
+@app.cell
+def _(df, forecasts, january_labeled_monthly_line_chart, mo, test, train):
+    # Build a df only for the forecast months
+    df_forecasts = df.clone().slice(len(train)).with_columns(
+        Passengers = forecasts
+    )
+
+    df_known = df.slice(-len(test) - 12)
+
+    chart_known = january_labeled_monthly_line_chart(
+        df_known,
+        y="Passengers",
+        title="Passengers by Month",
+        line_color='blue',
+        show_points = False
+    )
+
+    chart_forecast = january_labeled_monthly_line_chart(
+        df_forecasts,
+        y="Passengers",
+        title="Passengers by Month",
+        line_color='red',
+        show_points = False
+    )
+
+    mo.show_code(chart_known + chart_forecast)
     return
 
 
@@ -326,23 +657,13 @@ def _():
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Autocorrelation
-    """)
-    return
+    ## Model evaluation
 
+    We can choose the best value for the orders $p$, $d$ and $q$ by examining the autocorrelation in the data, as shown in a previous section, or by trying several values and evaluating the results.
 
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Forecasting
-    """)
-    return
+    In this section, we see how we can evaluate the quality of the models we build.
 
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Model selection
+    ???
     """)
     return
 
@@ -351,6 +672,8 @@ def _(mo):
 def _(mo):
     mo.md(r"""
     ## References
+
+    ???
     """)
     return
 
@@ -372,6 +695,8 @@ def _(alt, mo, pl):
         *,
         january_label_format: str = "%Y-%m",
         label_angle: int = 45,
+        line_color: str = 'blue',
+        show_points: bool = True,
         grid_color: str = "#aaaaaa",
         grid_opacity: float = .8,
         grid_width: float = .8,
@@ -383,7 +708,7 @@ def _(alt, mo, pl):
 
         line = (
             alt.Chart(df, title=title)
-            .mark_line(point=True)
+            .mark_line(point=show_points, color=line_color)
             .encode(
                 x=alt.X(
                     f"{x}:T",
