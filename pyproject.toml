@@ -8,6 +8,7 @@ dependencies = [
     "altair>=6.0.0",
     "marimo>=0.20.4",
     "polars>=1.39.0",
+    "python-lsp-server>=1.14.0",
     "pyzmq>=27.1.0",
     "statsmodels>=0.14.6",
 ]

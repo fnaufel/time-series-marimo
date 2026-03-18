@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.20.4"
-app = marimo.App(width="medium")
+app = marimo.App()
 
 
 @app.cell
@@ -52,9 +52,10 @@ def _():
     import polars as pl
     import altair as alt
     alt.data_transformers.enable('marimo_csv')
-    from statsmodels.tsa.stattools import adfuller
+    from scipy.stats import boxcox
+    import numpy as np
     mo.show_code()
-    return adfuller, alt, mo, pl
+    return alt, mo, np, pl
 
 
 @app.cell
@@ -68,8 +69,8 @@ def _(mo):
 @app.cell
 def _(mo, pl):
     df = pl.read_csv('AirPassengers.csv').with_columns(
-        (pl.col("Month") + "-01").str.to_date("%Y-%m-%d").alias("Month")
-    )
+        Month = (pl.col("Month") + "-01").str.to_date("%Y-%m-%d")
+    ).rename({'#Passengers': 'Passengers'})
 
     mo.show_code(df)
     return (df,)
@@ -89,7 +90,7 @@ def _(mo):
 def _(df, january_labeled_monthly_line_chart, mo):
     chart_original = january_labeled_monthly_line_chart(
         df,
-        y="#Passengers",
+        y="Passengers",
         title="Passengers by Month",
     )
 
@@ -134,28 +135,10 @@ def _(chart_select, df, mo, selection_summary_md):
     mo.md(
         selection_summary_md(
             _df_selected,
-            value_column="#Passengers",
+            value_column="Passengers",
             value_label="passengers",
         )
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ### ADF test for stationarity
-
-    The Augmented Dickey-Fuller (ADF) test is a statistical hypothesis test where **the null hypothesis** is that the series is **non-stationary**.
-
-    For our example:
-    """)
-    return
-
-
-@app.cell
-def _(adf_md, df, mo):
-    mo.md(adf_md(df['#Passengers']))
+    ).center()
     return
 
 
@@ -172,9 +155,7 @@ def _(mo):
     mo.md(r"""
     #### Differencing for the mean
 
-    Let's write $y(t)$ for the number of passengers at time $t$.
-
-    Instead of working with the values
+    Let's write $y(t)$ for the number of passengers at time $t$. Instead of working with the values
     $$
     y(t)
     $$
@@ -182,19 +163,34 @@ def _(mo):
     $$
     y(t) - y(t-k)
     $$
-    for some natural $k > 0$.
-
-    The value of $k$ is the **order** of the differencing.
+    for some natural $k > 0$. The value of $k$ is the **order** of the differencing.
 
     Usually, $k = 1$ is enough to make the mean constant through time.
 
     The `diff()` method (in Pandas or in Polars) computes the discrete difference of a series (which is also a series).
 
-    Choose the value of $k$ in the slider below to see how the graph below changes.
-
-    Select a time range in the graph to see the statistics for it.
+    Choose the value of $k$ in the slider below to see how the graph below changes, then select a time range in the graph to see the statistics for it.
     """)
     return
+
+
+@app.cell
+def _(df, diff_order, january_labeled_monthly_line_chart, mo, pl):
+    df_diff = (
+        df.with_columns(
+            Passengers_diff = pl.col('Passengers').diff(diff_order.value)
+        )
+    )
+
+    chart_diff = january_labeled_monthly_line_chart(
+        df_diff,
+        y="Passengers_diff",
+        title=f"Passengers by Month after differencing of order {diff_order.value}",
+    )
+
+    mo.show_code()
+
+    return chart_diff, df_diff
 
 
 @app.cell
@@ -213,33 +209,6 @@ def _(mo):
 
 
 @app.cell
-def _(df, diff_order, january_labeled_monthly_line_chart, pl):
-    _diff_expr = pl.col("#Passengers").cast(pl.Float64)
-    for _ in range(diff_order.value):
-        _diff_expr = _diff_expr.diff()
-
-    df_diff = (
-        df.with_columns(_diff_expr.alias("#Passengers_diff"))
-        .drop_nulls("#Passengers_diff")
-    )
-
-    chart_diff = january_labeled_monthly_line_chart(
-        df_diff,
-        y="#Passengers_diff",
-        title=f"Passengers by Month after differencing of order {diff_order.value}",
-    )
-
-
-    return chart_diff, df_diff
-
-
-@app.cell
-def _(adf_md, df_diff, mo):
-    mo.md(adf_md(df_diff['#Passengers_diff']))
-    return
-
-
-@app.cell
 def _(chart_diff, mo):
     chart_diff_select = mo.ui.altair_chart(chart_diff)
 
@@ -254,17 +223,81 @@ def _(chart_diff_select, df_diff, mo, selection_summary_md):
     mo.md(
         selection_summary_md(
             _df_diff_selected,
-            value_column="#Passengers_diff",
+            value_column="Passengers_diff",
             value_label="differenced passengers",
         )
-    )
+    ).center()
     return
 
 
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Seasonality
+    #### Log transforming for the standard deviation
+
+    The plot shows the standard deviation is still not constant through time. We can correct that by transforming the values using a log function.
+
+    Because the log function behaves in a bad way when applied to values near zero, let's do the logging **before** the differencing.
+
+    Select a time range in the graph below to see the statistics for it.
+    """)
+    return
+
+
+@app.cell
+def _(df, diff_order, january_labeled_monthly_line_chart, mo, np, pl):
+    df_log_diff = (
+        df.with_columns(
+            Passengers_log_diff = np.log(pl.col("Passengers")).diff()
+        )
+    )
+
+    chart_log_diff = january_labeled_monthly_line_chart(
+        df_log_diff,
+        y="Passengers_log_diff",
+        title=f"Passengers after log transform and differencing "
+            f"of order {diff_order.value}",
+    )
+
+    mo.show_code()
+    return chart_log_diff, df_log_diff
+
+
+@app.cell
+def _(chart_log_diff, mo):
+    chart_log_diff_select = mo.ui.altair_chart(chart_log_diff)
+
+    chart_log_diff_select
+    return (chart_log_diff_select,)
+
+
+@app.cell
+def _(chart_log_diff_select, df_log_diff, mo, selection_summary_md):
+    _df_log_diff_selected = chart_log_diff_select.apply_selection(df_log_diff)
+
+    mo.md(
+        selection_summary_md(
+            _df_log_diff_selected,
+            value_column="Passengers_log_diff",
+            value_label="differenced log passengers",
+        )
+    ).center()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### The Box-Cox transform
+
+    The log transform we used above is just a specific case of the more general **Box-Cox transform**:
+    $$
+    y_{i}^{(\lambda )}={\begin{cases}{\dfrac {y_{i}^{\lambda }-1}{\lambda }}&{\text{if }}\lambda \neq 0,\\\ln y_{i}&{\text{if }}\lambda =0,\end{cases}}
+    $$
+
+    The transformation depends on the value of a parameter $\lambda$. The scipy function that computes the Box-Cox transform finds the value of $\lambda$ that maximizes the log-likelihood function and returns it as the second output argument. [See how to use it in the documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.boxcox.html). If a simple log transform does not make the series stationary, try running this function.
+
+    For our example, the log transform was enough.
     """)
     return
 
@@ -273,7 +306,20 @@ def _(mo):
 def _(mo):
     mo.md(r"""
     ## Decomposition
+
+    We can try to decompose a time series into 3 components:
+
+    - Trend,
+    - Seasonality,
+    - Residuals.
+
+    Going back to the original time series (with no transformations), we get the following components:
     """)
+    return
+
+
+@app.cell
+def _():
     return
 
 
@@ -322,7 +368,7 @@ def _(alt, mo, pl):
     def january_labeled_monthly_line_chart(
         df: pl.DataFrame,
         x: str = "Month",
-        y: str = "#Passengers",
+        y: str = "Passengers",
         *,
         january_label_format: str = "%Y-%m",
         label_angle: int = 45,
@@ -415,24 +461,15 @@ def _(mo, pl):
         _std_display = "N/A" if _std_value is None else f"{_std_value:.2f}"
 
         return f"""
-        - Minimum month: `{_month_min}`
-        - Maximum month: `{_month_max}`
-        - Selected points: `{_n_selected_points}`
-        - Mean {value_label}: `{_mean_display}`
-        - Std. dev. {value_label}: `{_std_display}`
+        Minimum month: `{_month_min}`  
+        Maximum month: `{_month_max}`  
+        Selected points: `{_n_selected_points}`  
+        Mean {value_label}: `{_mean_display}`  
+        Std. dev. {value_label}: `{_std_display}`
         """
 
     mo.show_code()
     return (selection_summary_md,)
-
-
-@app.cell
-def _(adfuller):
-    def adf_md(series):
-        _p_value = adfuller(series)[1]
-        return f'ADF test p-value: {_p_value:.5f}'
-
-    return (adf_md,)
 
 
 if __name__ == "__main__":
