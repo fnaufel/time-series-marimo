@@ -210,7 +210,6 @@ def _(df, diff_order, january_labeled_monthly_line_chart, mo, pl):
     )
 
     mo.show_code()
-
     return chart_diff, df_diff
 
 
@@ -577,14 +576,15 @@ def _(mo):
 
 
 @app.cell
-def _(ARIMA, d, p, q, train):
+def _(ARIMA, d, mo, p, q, train):
     model = ARIMA(train, order=(p, d, q)).fit()
+    mo.show_code()
     return (model,)
 
 
 @app.cell
-def _(model):
-    model.summary()
+def _(mo, model):
+    mo.show_code(model.summary())
     return
 
 
