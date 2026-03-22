@@ -1,6 +1,19 @@
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#     "altair==6.0.0",
+#     "marimo",
+#     "matplotlib==3.10.8",
+#     "numpy==2.4.3",
+#     "polars==1.39.3",
+#     "scipy==1.17.1",
+#     "statsmodels==0.14.6",
+# ]
+# ///
+
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.1"
 app = marimo.App()
 
 
@@ -41,6 +54,12 @@ def _(mo):
 @app.cell
 def _():
     import marimo as mo
+    mo.show_code()
+    return (mo,)
+
+
+@app.cell
+def _(mo):
     import numpy as np
     import polars as pl
     import altair as alt
@@ -50,18 +69,9 @@ def _():
     from statsmodels.tsa.seasonal import seasonal_decompose
     from statsmodels.tsa.arima.model import ARIMA
     from statsmodels.graphics.tsaplots import plot_acf
+    import matplotlib
     mo.show_code()
-    return (
-        ARIMA,
-        alt,
-        boxcox,
-        inv_boxcox,
-        mo,
-        np,
-        pl,
-        plot_acf,
-        seasonal_decompose,
-    )
+    return ARIMA, alt, boxcox, inv_boxcox, np, pl, plot_acf, seasonal_decompose
 
 
 @app.cell
@@ -82,7 +92,8 @@ def _(mo):
 
 @app.cell
 def _(mo, pl):
-    df = pl.read_csv('AirPassengers.csv').with_columns(
+    path_to_csv = mo.notebook_location() / "public" / "AirPassengers.csv"
+    df = pl.read_csv(path_to_csv.as_posix()).with_columns(
         Month = (pl.col("Month") + "-01").str.to_date("%Y-%m-%d")
     ).rename({'#Passengers': 'Passengers'})
 
@@ -661,9 +672,7 @@ def _(mo):
 
     We can choose the best value for the orders $p$, $d$ and $q$ by examining the autocorrelation in the data, as shown in a previous section, or by trying several values and evaluating the results.
 
-    In this section, we see how we can evaluate the quality of the models we build.
-
-    ???
+    In a future document, we will see how we can evaluate the quality of the models we have built.
     """)
     return
 
@@ -673,7 +682,24 @@ def _(mo):
     mo.md(r"""
     ## References
 
-    ???
+    ### Marimo
+
+    - https://docs.marimo.io/
+
+    ### Polars
+
+    - Book: https://scholarfriends.com/singlePaper/623454/ebook-pdf-python-polars-the-definitive-guide-by-jeroen-janssens-thijs-nieuwdorp
+    - Site: https://docs.pola.rs/api/python/stable/reference/index.html
+
+    ### Altair
+
+    - https://altair-viz.github.io/index.html
+
+    ### Time series
+
+    - Book: Montgomery, D.C. and Jennings, C.L. and Kulahci, M. (2024). *Introduction to Time Series Analysis and Forecasting*. Wiley.
+    - Video playlist: https://youtube.com/playlist?list=PLvcbYUQ5t0UHOLnBzl46_Q6QKtFgfMGc3
+    - Video playlist: https://www.youtube.com/playlist?list=PLKmQjl_R9bYd32uHImJxQSFZU5LPuXfQe
     """)
     return
 
@@ -700,8 +726,8 @@ def _(alt, mo, pl):
         grid_color: str = "#aaaaaa",
         grid_opacity: float = .8,
         grid_width: float = .8,
-        width: int | None = None,
-        height: int | None = None,
+        width: int | str | None = 'container',
+        height: int | str | None = None,
         title: str | None = None,
     ) -> alt.Chart:
         jan = df.filter(pl.col(x).dt.month() == 1)
