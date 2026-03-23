@@ -23,6 +23,8 @@ def _(mo):
     # Time series
 
     **[Fernando Náufel](https://fnaufel.github.io)**
+
+    2026-03-23
     """)
     return
 
@@ -40,7 +42,9 @@ def _(mo):
 
     If you suspect there is something wrong, click on the '...' button on the top right and then on 'show code'. If there are any error messages, you should be able to see them.
 
-    If you want to fork and edit this marimo notebook, [open it in molab](https://molab.marimo.io/notebooks).
+    If you want to fork and edit this marimo notebook, [open it in molab](https://molab.marimo.io/github/fnaufel/time-series-marimo/blob/master/time-series.py).
+
+    [![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/fnaufel/time-series-marimo/blob/master/time-series.py)
     """)
     return
 
