@@ -21,6 +21,26 @@ app = marimo.App()
 def _(mo):
     mo.md(r"""
     # Time series
+
+    **[Fernando Náufel](https://fnaufel.github.io)**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## About this document
+
+    This web page is a [marimo notebook](https://docs.marimo.io/), a type of Python notebook that has quite a few advantages over Jupyter notebooks. Read more about it at [the marimo website](https://docs.marimo.io/).
+
+    The Python interpreter and the necessary packages are all running **in your browser**, using [Pyodide](https://pyodide.org/en/stable/) and [WebAssembly](https://webassembly.org). Nothing will be installed on your device.
+
+    What you see now is a **read-only, interactive version of the notebook**. All cells should be executed when this web page is loaded, and their outputs should be rendered after a while.
+
+    If you suspect there is something wrong, click on the '...' button on the top right and then on 'show code'. If there are any error messages, you should be able to see them.
+
+    If you want to fork and edit this marimo notebook, [open it in molab](https://molab.marimo.io/notebooks).
     """)
     return
 
@@ -92,8 +112,8 @@ def _(mo):
 
 @app.cell
 def _(mo, pl):
-    path_to_csv = mo.notebook_location() / "public" / "AirPassengers.csv"
-    df = pl.read_csv(path_to_csv.as_posix()).with_columns(
+    path_to_csv = 'https://raw.githubusercontent.com/fnaufel/time-series-marimo/refs/heads/master/data/AirPassengers.csv'
+    df = pl.read_csv(path_to_csv).with_columns(
         Month = (pl.col("Month") + "-01").str.to_date("%Y-%m-%d")
     ).rename({'#Passengers': 'Passengers'})
 
